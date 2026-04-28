@@ -23,11 +23,14 @@ print("Welcome Nate lets log the session\n")
 #Loop 1 TYPE
 
 while True:
- print("What are you geeking on? (Blunt, Bongrip ,Bowl, Geeb, Shrooms.")
+ print("What are you geeking on? Enter: Blunt, Bongrip ,Bowl, Geeb, Shrooms or (exit).")
  smoke_type = input("Enter choice: ").lower()
 
+ if smoke_type == "exit":
+  print("Program session ended, NOTHING WAS LOGGED.")
+  quit()
 
- if smoke_type in ["blunt","bongrip", "bowl", "geeb", "shrooms"]:
+ elif smoke_type in ["blunt","bongrip", "bowl", "geeb", "shrooms"]:
     break
  else:
   print("Invalid input pls try again fn! \n")
