@@ -1,0 +1,297 @@
+from __future__ import annotations
+
+# Standard library imports
+import os
+from datetime import datetime
+from typing import List, Tuple
+
+# Third-party imports
+import openpyxl
+from openpyxl import Workbook
+import tkinter as tk
+from tkinter import messagebox, ttk
+from PIL import Image, ImageTk
+
+
+# =========================
+# CONSTANT DEFINITIONS
+# =========================
+
+# Excel file name (persistent storage)
+FILE_NAME: str = "Geek_log.xlsx"
+
+# Allowed input types (strict validation)
+VALID_TYPES: List[str] = ["blunt", "bongrip", "bowl", "geeb", "shrooms"]
+
+
+# =========================
+# MAIN APPLICATION CLASS
+# =========================
+
+class GeekLoggerApp:
+    """
+    GUI-based habit tracker application.
+
+    Responsibilities:
+    - Manage UI state transitions (step-by-step input)
+    - Validate all user inputs
+    - Persist data into Excel
+    - Display stored records in a table
+    """
+
+    def __init__(self, root: tk.Tk) -> None:
+        """
+        Initialize application state and UI.
+
+        :param root: Root Tkinter window
+        """
+        self.root = root
+        self.root.title("Don's Bakery Habit Tracker")
+        self.root.geometry("700x500")
+        self.root.configure(bg="#1e1e1e")  # Dark theme background
+
+        # Initialize Excel file and sheet
+        self.workbook, self.sheet = self._init_excel()
+
+        # State machine index (controls input flow)
+        self.current_step: int = 0
+
+        # Data placeholders (populated step-by-step)
+        self.smoke_type: str = ""
+        self.grams: float = 0.0
+        self.date_input: str = ""
+        self.time_input: str = ""
+
+        # Build UI components
+        self._build_ui()
+
+    # =========================
+    # EXCEL INITIALIZATION
+    # =========================
+
+    def _init_excel(self) -> Tuple[Workbook, openpyxl.worksheet.worksheet.Worksheet]:
+        """
+        Initialize Excel workbook.
+
+        - Loads existing file if present
+        - Otherwise creates new file with headers
+
+        :return: workbook, active sheet
+        """
+        if os.path.exists(FILE_NAME):
+            workbook = openpyxl.load_workbook(FILE_NAME)
+            sheet = workbook.active
+        else:
+            workbook = Workbook()
+            sheet = workbook.active
+            sheet.title = "Nates Black Book Geek Log"
+
+            # Header row
+            sheet.append(["Type", "Grams", "Date", "Time"])
+
+        return workbook, sheet
+
+    # =========================
+    # UI CONSTRUCTION
+    # =========================
+
+    def _build_ui(self) -> None:
+        """
+        Build all UI elements:
+        - Image (top-left)
+        - Prompt text
+        - Input field
+        - Action button
+        - Data table
+        """
+
+        # Load and resize image (oven artwork)
+        img = Image.open("/mnt/data/image.png")
+        img = img.resize((150, 150))
+
+        # Convert image to Tkinter-compatible format
+        self.tk_img = ImageTk.PhotoImage(img)
+
+        # Place image in top-left corner
+        img_label = tk.Label(self.root, image=self.tk_img, bg="#1e1e1e")
+        img_label.place(x=10, y=10)
+
+        # Prompt label (dynamic text changes per step)
+        self.prompt = tk.Label(
+            self.root,
+            text="Welcome Nate. Start logging.",
+            font=("Arial", 16),
+            fg="white",
+            bg="#1e1e1e",
+        )
+        self.prompt.place(x=180, y=50)
+
+        # Text entry field (user input)
+        self.entry = tk.Entry(self.root, font=("Arial", 14), width=30)
+        self.entry.place(x=180, y=100)
+
+        # Button triggers step progression
+        self.btn = tk.Button(
+            self.root,
+            text="Next",
+            command=self.next_step,
+            font=("Arial", 12),
+            bg="#00bcd4",
+            fg="black",
+        )
+        self.btn.place(x=180, y=150)
+
+        # Table (Treeview) to display Excel data
+        self.tree = ttk.Treeview(
+            self.root,
+            columns=("Type", "Grams", "Date", "Time"),
+            show="headings",
+        )
+
+        # Define table headers
+        for col in ("Type", "Grams", "Date", "Time"):
+            self.tree.heading(col, text=col)
+
+        # Position table
+        self.tree.place(x=50, y=250, width=600, height=200)
+
+        # Load existing Excel data into table
+        self._load_table()
+
+        # Initialize first prompt
+        self._update_prompt()
+
+    # =========================
+    # UI STATE MANAGEMENT
+    # =========================
+
+    def _update_prompt(self) -> None:
+        """
+        Update prompt text based on current step.
+
+        Steps:
+        0 = type
+        1 = grams
+        2 = date
+        3 = time
+        """
+        prompts = [
+            "Enter type (blunt, bongrip, bowl, geeb, shrooms):",
+            "Enter grams:",
+            "Enter date (MM/DD/YYYY):",
+            "Enter time (HH:MM AM/PM):",
+        ]
+
+        self.prompt.config(text=prompts[self.current_step])
+
+        # Clear input field for next entry
+        self.entry.delete(0, tk.END)
+
+    def next_step(self) -> None:
+        """
+        Core state machine controlling user input flow.
+
+        Each step:
+        - Validates input
+        - Stores value
+        - Advances to next step
+        - On final step: saves data + refreshes table
+        """
+        value = self.entry.get().strip()
+
+        try:
+            # Step 0: Validate type
+            if self.current_step == 0:
+                if value.lower() not in VALID_TYPES:
+                    raise ValueError("Invalid type")
+                self.smoke_type = value.lower()
+
+            # Step 1: Validate grams
+            elif self.current_step == 1:
+                self.grams = float(value)
+                if self.grams <= 0:
+                    raise ValueError("Grams must be positive")
+
+            # Step 2: Validate date format
+            elif self.current_step == 2:
+                datetime.strptime(value, "%m/%d/%Y")
+                self.date_input = value
+
+            # Step 3: Validate time format + save
+            elif self.current_step == 3:
+                datetime.strptime(value, "%I:%M %p")
+                self.time_input = value
+
+                # Persist data
+                self._save_data()
+
+                # Notify user
+                messagebox.showinfo("Success", "Session logged.")
+
+                # Refresh table view
+                self._load_table()
+
+                # Reset flow
+                self.current_step = -1
+
+            # Move to next step
+            self.current_step += 1
+            self._update_prompt()
+
+        except ValueError as err:
+            # Controlled error handling (no silent failures)
+            messagebox.showerror("Error", str(err))
+
+    # =========================
+    # DATA PERSISTENCE
+    # =========================
+
+    def _save_data(self) -> None:
+        """
+        Append validated data to Excel and save file.
+        """
+        self.sheet.append([
+            self.smoke_type,
+            self.grams,
+            self.date_input,
+            self.time_input,
+        ])
+
+        self.workbook.save(FILE_NAME)
+
+    # =========================
+    # TABLE RENDERING
+    # =========================
+
+    def _load_table(self) -> None:
+        """
+        Load all Excel rows into UI table.
+
+        - Clears existing UI rows
+        - Re-populates from sheet
+        """
+
+        # Clear current table contents
+        for row in self.tree.get_children():
+            self.tree.delete(row)
+
+        # Insert all rows except header
+        for row in self.sheet.iter_rows(min_row=2, values_only=True):
+            self.tree.insert("", tk.END, values=row)
+
+
+# =========================
+# APPLICATION ENTRY POINT
+# =========================
+
+def main() -> None:
+    """
+    Launch the Tkinter application.
+    """
+    root = tk.Tk()
+    app = GeekLoggerApp(root)
+    root.mainloop()
+
+
+if __name__ == "__main__":
+    main()
